@@ -50,9 +50,11 @@ function handleMessage(message) {
     action = packet.Action.toString();
 
     // Send data
-    sendValueToSerial(doorId);
-    sendValueToSerial(gatewayId);
-    sendValueToSerial(action);
+    //sendValueToSerial(doorId);
+    //sendValueToSerial(gatewayId);
+    //sendValueToSerial(action);
+
+    sendPacketToSerial(doorId, gatewayId, 3, action);
     
 
 
@@ -61,6 +63,7 @@ function handleMessage(message) {
 function sendValueToSerial(value) {
   // Convert the value to a single byte
   const byte = value & 0xFF;
+  console.log("value: " + value + " --> byte: " + byte);
 
   // Write the byte to the serial port
   port.write(Buffer.from([byte]), (err) => {
@@ -71,6 +74,30 @@ function sendValueToSerial(value) {
     }
   });
 }
+
+function sendPacketToSerial(receiver, sender, typeOfMessage, actionToDo) {
+  // Create a buffer with the correct size
+  const bufferSize = 4;
+  const buffer = Buffer.alloc(bufferSize);
+
+  // Write the value to the buffer as a single byte
+  buffer.writeUInt8(receiver, 0);
+  buffer.writeUInt8(sender, 1);
+  buffer.writeUInt8(typeOfMessage, 2);
+  buffer.writeUInt8(actionToDo, 3);
+
+  // Write the buffer to the serial port
+  port.write(buffer, (err) => {
+    if (err) {
+      console.error('Error writing to serial port:', err);
+    } else {
+      console.log('Packet sent successfully!');
+    }
+  });
+}
+
+// Example usage: sending value 250 and "hello" as a single packet
+//sendPacketToSerial(250, 'hello');
 
 
 client.open()
