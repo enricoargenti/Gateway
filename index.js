@@ -1,31 +1,32 @@
 const { SerialPort } = require('serialport')
-const { Client } = require("azure-iot-device");
+const { Message, Client } = require("azure-iot-device");
 const { Mqtt } = require("azure-iot-device-mqtt");
 const { ReadlineParser } = require('@serialport/parser-readline')
+const moment = require('moment');
 
 'use strict';
+
+// IoTHub client
+const connectionString = "HostName=Pi-Cloud.azure-devices.net;DeviceId=Device1;SharedAccessKey=cWAuOHDm1yxil0atVN7QWzm21EblpCnnzw/vmoDUUIw=";
+const client = Client.fromConnectionString(connectionString, Mqtt);
+
+// Serial port
+const port = new SerialPort({ path: 'COM7', baudRate: 9600 })
 
 // Variables
 var doorId;
 var gatewayId;
 var action;
 
-const port = new SerialPort({ path: 'COM7', baudRate: 9600 })
 
 
-
-// Read 
-/*
-port.on("open", function() {
-    console.log("-- Connection opened --");
-    port.on("data", function(data) {
-        console.log("Data received: " + data);
-
-        convertAndSendToCloud(data);
-        
-    });
-});
-*/
+client.open()
+  .then(() => {
+    console.log("Connected to IoT Hub. Waiting for messages...");
+  })
+  .catch((err) => {
+    console.error("Error opening the client:", err.message);
+  });
 
 
 function parseMsg(data) {
@@ -42,23 +43,58 @@ function convertAndSendToCloud(data) {
   // Encoder for bytes
   let utf8Encode = new TextEncoder();
 
-  console.log("Type of data: " + typeof data);
-  console.log("data now: " + data);
+  //console.log("Type of data: " + typeof data);
+  //console.log("data now: " + data);
 
   // Take the first two bytes
   var byte1 = utf8Encode.encode(data[0]);
   var byte2 = utf8Encode.encode(data[1]);
-  console.log("byte1 is type: " + typeof byte1);
+  //console.log("byte1 is type: " + typeof byte1);
 
   // Convert the bytes to numeric values
-  var numericValue1 = parseInt(byte1);
-  var numericValue2 = parseInt(byte2);
+  var doorId = parseInt(byte1);
+  var typeOfMessageInt = parseInt(byte2);
 
+  if(typeOfMessageInt == 1) {
+    var typeOfMessageString = "firstMessageFromDoor";
+    var deviceGeneratedCode = data.substring(2, 8);
+    var currentTime = moment().format('YYYY-MM-DDTHH:mm:ss.SSS');
+  }
+  else if (typeOfMessageInt == 2) {
+    var typeOfMessageString = "secondMessageFromDoor";
+  }
 
-  console.log('Byte 1: ' + byte1);
-  console.log('Byte 2: ' + byte2);
-  console.log('Numeric value 1: ' + numericValue1);
-  console.log('Numeric value 2: ' + numericValue2);
+  //console.log('Byte 1: ' + byte1);
+  //console.log('Byte 2: ' + byte2);
+  //console.log('Numeric value 1: ' + doorId);
+  //console.log('Numeric value 2: ' + typeOfMessageInt);
+
+  let OpenDoorRequest = {
+    Id: null,
+    DoorId: doorId,
+    DeviceId: 'Device1',
+    DeviceGeneratedCode: deviceGeneratedCode,
+    CloudGeneratedCode: null,
+    CodeInsertedOnDoorByUser: null,
+    AccessRequestTime: currentTime,
+    UserId: null,
+    TypeOfMessage: typeOfMessageString
+  };
+
+  var jsonOpenDoorRequest = JSON.stringify(OpenDoorRequest);
+  console.log(jsonOpenDoorRequest);
+
+  // Send to IoTHub
+  var payload = jsonOpenDoorRequest;
+  var message = new Message(payload);
+  client.sendEvent(message, (err) => {
+    if (err) {
+      console.error('Error sending the message: ', err);
+    } else {
+      console.log('Message sent successfully!');
+    }
+  });
+
 }
 
 /*
@@ -80,10 +116,6 @@ function convertAndSendToCloud(data) {
   }
 }
 */
-
-
-const connectionString = "HostName=Pi-Cloud.azure-devices.net;DeviceId=Device1;SharedAccessKey=cWAuOHDm1yxil0atVN7QWzm21EblpCnnzw/vmoDUUIw=";
-const client = Client.fromConnectionString(connectionString, Mqtt);
 
 client.on("message", handleMessage);
 
@@ -144,14 +176,3 @@ function sendPacketToSerial(receiver, sender, typeOfMessage, actionToDo) {
 
 // Example usage: sending value 250 and "hello" as a single packet
 //sendPacketToSerial(250, 'hello');
-
-
-client.open()
-  .then(() => {
-    console.log("Connected to IoT Hub. Waiting for messages...");
-  })
-  .catch((err) => {
-    console.error("Error opening the client:", err.message);
-  });
-
-// ----------------------------------------------------------------------------------------------------------------
