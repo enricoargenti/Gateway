@@ -6,12 +6,14 @@ const moment = require('moment');
 
 'use strict';
 
+//---------------------------------------- Variables and constants ------------------------------------------------
+
 // IoTHub client
 const connectionString = "HostName=Pi-Cloud.azure-devices.net;DeviceId=Device1;SharedAccessKey=cWAuOHDm1yxil0atVN7QWzm21EblpCnnzw/vmoDUUIw=";
 const client = Client.fromConnectionString(connectionString, Mqtt);
 
 // Serial port
-const port = new SerialPort({ path: 'COM7', baudRate: 9600 })
+const port = new SerialPort({ path: 'COM2', baudRate: 9600 })
 
 // Variables
 const gatewayId = '0'; // Per l'invio al PIC
@@ -20,7 +22,7 @@ const deviceId = 'Device1'; // Fisso
 
 
 
-
+//---------------------------------------- IoTHub client start ------------------------------------------------
 client.open()
   .then(() => {
     console.log("Connected to IoT Hub. Waiting for messages...");
@@ -29,6 +31,11 @@ client.open()
     console.error("Error opening the client:", err.message);
   });
 
+//------------------------------------- Receive cloud to device messages -----------------------------------------
+
+client.on("message", handleMessage);
+
+//---------------------------------------- Parsing functions ------------------------------------------------
 
 function parseMsg(data) {
   console.log("Data received: " + data);
@@ -40,11 +47,12 @@ const parser = port.pipe(new ReadlineParser({ delimiter: '*' }))
 parser.on('data', parseMsg)
 
 
+
 function convertAndSendToCloud(data) {
   // Encoder for bytes
   let utf8Encode = new TextEncoder();
 
-  //console.log("data now: " + data);
+  console.log("data now: " + data);
 
   // Take the first two bytes
   var byte1 = utf8Encode.encode(data[0]);
@@ -83,11 +91,6 @@ function convertAndSendToCloud(data) {
     };
   }
 
-  //console.log('Byte 1: ' + byte1);
-  //console.log('Byte 2: ' + byte2);
-  //console.log('Numeric value 1: ' + doorId);
-  //console.log('Numeric value 2: ' + typeOfMessageInt);
-
   var jsonOpenDoorRequest = JSON.stringify(OpenDoorRequest);
   console.log(jsonOpenDoorRequest);
 
@@ -103,6 +106,54 @@ function convertAndSendToCloud(data) {
   });
 
 }
+
+function handleMessage(message) {
+    console.log("Received message:", message.getData().toString());
+
+    // Packet
+    try{
+      var jsonPacket = message.getData().toString();
+      var packet = JSON.parse(jsonPacket);
+
+      // Set variables
+      doorId = packet.DoorId.toString();
+      action = packet.Action.toString();
+
+      sendPacketToSerial(doorId, gatewayId, 1, action);
+    
+    }
+    catch(err){
+      console.log("Unable to deserialize json");
+    }
+}
+
+
+
+function sendPacketToSerial(receiver, sender, typeOfMessage, actionToDo) {
+  // Create a buffer with the correct size
+  const bufferSize = 4;
+  const buffer = Buffer.alloc(bufferSize);
+
+  // Write the value to the buffer as a single byte
+  buffer.writeUInt8(receiver & 0xFF, 0);
+  buffer.writeUInt8(sender & 0xFF, 1);
+  buffer.writeUInt8(typeOfMessage & 0xFF, 2);
+  buffer.writeUInt8(actionToDo & 0xFF, 3);
+
+  console.log(buffer);
+
+  // Write the buffer to the serial port
+  
+  port.write(buffer, (err) => {
+    if (err) {
+      console.error('Error writing to serial port:', err);
+    } else {
+      console.log('Packet sent successfully!');
+    }
+  });
+  
+}
+
 
 /*
 function convertAndSendToCloud(data) {
@@ -123,62 +174,3 @@ function convertAndSendToCloud(data) {
   }
 }
 */
-
-client.on("message", handleMessage);
-
-function handleMessage(message) {
-    console.log("Received message:", message.getData().toString());
-
-    // Packet
-    try{
-      var jsonPacket = message.getData().toString();
-      var packet = JSON.parse(jsonPacket);
-
-      // Set variables
-      doorId = packet.DoorId.toString();
-      action = packet.Action.toString();
-
-      // Send data
-      //sendValueToSerial(doorId);
-      //sendValueToSerial(gatewayId);
-      //sendValueToSerial(action);
-
-    sendPacketToSerial(doorId, gatewayId, 1, action);
-    
-    }
-    catch(err){
-      console.log("Unable to deserialize json");
-    }
-    
-
-
-}
-
-
-
-
-function sendPacketToSerial(receiver, sender, typeOfMessage, actionToDo) {
-  // Create a buffer with the correct size
-  const bufferSize = 4;
-  const buffer = Buffer.alloc(bufferSize);
-
-  // Write the value to the buffer as a single byte
-  buffer.writeUInt8(receiver & 0xFF, 0);
-  buffer.writeUInt8(sender & 0xFF, 1);
-  buffer.writeUInt8(typeOfMessage & 0xFF, 2);
-  buffer.writeUInt8(actionToDo & 0xFF, 3);
-
-  console.log(buffer);
-
-  // Write the buffer to the serial port
-  port.write(buffer, (err) => {
-    if (err) {
-      console.error('Error writing to serial port:', err);
-    } else {
-      console.log('Packet sent successfully!');
-    }
-  });
-}
-
-// Example usage: sending value 250 and "hello" as a single packet
-//sendPacketToSerial(250, 'hello');
