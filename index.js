@@ -14,9 +14,10 @@ const client = Client.fromConnectionString(connectionString, Mqtt);
 const port = new SerialPort({ path: 'COM7', baudRate: 9600 })
 
 // Variables
-var doorId;
-var gatewayId;
-var action;
+const gatewayId = '0'; // Per l'invio al PIC
+
+const deviceId = 'Device1'; // Fisso
+
 
 
 
@@ -43,43 +44,49 @@ function convertAndSendToCloud(data) {
   // Encoder for bytes
   let utf8Encode = new TextEncoder();
 
-  //console.log("Type of data: " + typeof data);
   //console.log("data now: " + data);
 
   // Take the first two bytes
   var byte1 = utf8Encode.encode(data[0]);
   var byte2 = utf8Encode.encode(data[1]);
-  //console.log("byte1 is type: " + typeof byte1);
 
   // Convert the bytes to numeric values
   var doorId = parseInt(byte1);
   var typeOfMessageInt = parseInt(byte2);
 
   if(typeOfMessageInt == 1) {
-    var typeOfMessageString = "firstMessageFromDoor";
-    var deviceGeneratedCode = data.substring(2, 8);
-    var currentTime = moment().format('YYYY-MM-DDTHH:mm:ss.SSS');
+
+    var OpenDoorRequest = {
+      Id: null,
+      DoorId: doorId,
+      DeviceId: deviceId,
+      DeviceGeneratedCode: data.substring(2, 7),
+      CloudGeneratedCode: null,
+      CodeInsertedOnDoorByUser: null,
+      AccessRequestTime: moment().format('YYYY-MM-DDTHH:mm:ss.SSS'),
+      UserId: null,
+      TypeOfMessage: "firstMessageFromDoor"
+    };
   }
   else if (typeOfMessageInt == 2) {
-    var typeOfMessageString = "secondMessageFromDoor";
+
+    var OpenDoorRequest = {
+      Id: null,
+      DoorId: doorId,
+      DeviceId: deviceId,
+      DeviceGeneratedCode: data.substring(2, 7),
+      CloudGeneratedCode: null,
+      CodeInsertedOnDoorByUser: data.substring(7, 12),
+      AccessRequestTime: null,
+      UserId: null,
+      TypeOfMessage: "secondMessageFromDoor"
+    };
   }
 
   //console.log('Byte 1: ' + byte1);
   //console.log('Byte 2: ' + byte2);
   //console.log('Numeric value 1: ' + doorId);
   //console.log('Numeric value 2: ' + typeOfMessageInt);
-
-  let OpenDoorRequest = {
-    Id: null,
-    DoorId: doorId,
-    DeviceId: 'Device1',
-    DeviceGeneratedCode: deviceGeneratedCode,
-    CloudGeneratedCode: null,
-    CodeInsertedOnDoorByUser: null,
-    AccessRequestTime: currentTime,
-    UserId: null,
-    TypeOfMessage: typeOfMessageString
-  };
 
   var jsonOpenDoorRequest = JSON.stringify(OpenDoorRequest);
   console.log(jsonOpenDoorRequest);
@@ -129,7 +136,6 @@ function handleMessage(message) {
 
       // Set variables
       doorId = packet.DoorId.toString();
-      gatewayId = '0';
       action = packet.Action.toString();
 
       // Send data
