@@ -13,32 +13,31 @@ const connectionString = "HostName=Pi-Cloud.azure-devices.net;DeviceId=Device1;S
 const client = Client.fromConnectionString(connectionString, Mqtt);
 
 // Serial port
-const port = new SerialPort({ path: 'COM2', baudRate: 9600 })
+const port = new SerialPort({ path: 'COM8', baudRate: 9600 })
 
 // Variables
 const gatewayId = '0'; // Per l'invio al PIC
-
 const deviceId = 'Device1'; // Fisso
 
 
 
-//---------------------------------------- IoTHub client start ------------------------------------------------
+//---------------------------------------- IoTHub client starts ------------------------------------------------
 client.open()
   .then(() => {
-    console.log("Connected to IoT Hub. Waiting for messages...");
+    console.log('Connected to IoT Hub. Waiting for messages...');
   })
   .catch((err) => {
-    console.error("Error opening the client:", err.message);
+    console.error('Error opening the client:', err.message);
   });
 
 //------------------------------------- Receive cloud to device messages -----------------------------------------
 
 client.on("message", handleMessage);
 
-//---------------------------------------- Parsing functions ------------------------------------------------
+//---------------------------------------- Parsing functions -----------------------------------------------------
 
 function parseMsg(data) {
-  console.log("Data received: " + data);
+  console.log('\nData received: ' + data + '\n');
   convertAndSendToCloud(data);
 }
 
@@ -46,24 +45,22 @@ function parseMsg(data) {
 const parser = port.pipe(new ReadlineParser({ delimiter: '*' }))
 parser.on('data', parseMsg)
 
-
+//---------------------------------------- Data conversion and sending -------------------------------------------
 
 function convertAndSendToCloud(data) {
   // Encoder for bytes
   let utf8Encode = new TextEncoder();
 
-  console.log("data now: " + data);
-
   // Take the first two bytes
   var byte1 = utf8Encode.encode(data[0]);
   var byte2 = utf8Encode.encode(data[1]);
 
-  // Convert the bytes to numeric values
+  // Convert these bytes to numeric values
   var doorId = parseInt(byte1);
   var typeOfMessageInt = parseInt(byte2);
 
   if(typeOfMessageInt == 1) {
-
+    // Message structure
     var OpenDoorRequest = {
       Id: null,
       DoorId: doorId,
@@ -77,7 +74,7 @@ function convertAndSendToCloud(data) {
     };
   }
   else if (typeOfMessageInt == 2) {
-
+    // Message structure
     var OpenDoorRequest = {
       Id: null,
       DoorId: doorId,
@@ -91,6 +88,7 @@ function convertAndSendToCloud(data) {
     };
   }
 
+  // JSON message
   var jsonOpenDoorRequest = JSON.stringify(OpenDoorRequest);
   console.log(jsonOpenDoorRequest);
 
@@ -99,16 +97,18 @@ function convertAndSendToCloud(data) {
   var message = new Message(payload);
   client.sendEvent(message, (err) => {
     if (err) {
-      console.error('Error sending the message: ', err);
+      console.error('\nError sending the message to IoTHub: ', err);
     } else {
-      console.log('Message sent successfully!');
+      console.log('\nMessage sent successfully to IoTHub!\n');
     }
   });
 
 }
 
+//-------------------------------------- Messages from cloud handling -------------------------------------------
+
 function handleMessage(message) {
-    console.log("Received message:", message.getData().toString());
+    console.log('Received message: ' + message.getData().toString());
 
     // Packet
     try{
@@ -119,15 +119,16 @@ function handleMessage(message) {
       doorId = packet.DoorId.toString();
       action = packet.Action.toString();
 
+      // Send every message to the PICs network
       sendPacketToSerial(doorId, gatewayId, 1, action);
     
     }
     catch(err){
-      console.log("Unable to deserialize json");
+      console.log('Unable to deserialize json');
     }
 }
 
-
+//-------------------------------------- Packet sending through serial -------------------------------------------
 
 function sendPacketToSerial(receiver, sender, typeOfMessage, actionToDo) {
   // Create a buffer with the correct size
@@ -144,6 +145,7 @@ function sendPacketToSerial(receiver, sender, typeOfMessage, actionToDo) {
 
   // Write the buffer to the serial port
   
+  
   port.write(buffer, (err) => {
     if (err) {
       console.error('Error writing to serial port:', err);
@@ -152,25 +154,15 @@ function sendPacketToSerial(receiver, sender, typeOfMessage, actionToDo) {
     }
   });
   
+
+  /*
+  port.write("hello", (err) => {
+    if (err) {
+      console.error('Error writing to serial port:', err);
+    } else {
+      console.log('Packet sent successfully!');
+    }
+  });
+  */
+  
 }
-
-
-/*
-function convertAndSendToCloud(data) {
-  // Append the received data to a buffer
-  let receivedData = Buffer.alloc(0);
-  receivedData = Buffer.concat([receivedData, data]);
-  console.log("Received data:" + receivedData);
-
-  // Process the received data byte by byte
-  for (let i = 0; i < receivedData.length; i++) {
-    const byte = receivedData[i];
-
-    // Convert the byte to a numeric value
-    const numericValue = parseInt(byte.toString(16), 16);
-
-    console.log('Numeric value: ' + numericValue);
-    console.log();
-  }
-}
-*/
